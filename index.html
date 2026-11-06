@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>シンプル電卓（あまりの出る割り算つき）</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=BIZ+UDPGothic:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #eef1f5;
+    --body: #ffffff;
+    --ink: #1f2937;
+    --sub: #6b7280;
+    --key: #f3f4f6;
+    --key-hover: #e5e7eb;
+    --op: #dbeafe;
+    --op-ink: #1d4ed8;
+    --op-active: #1d4ed8;
+    --mod: #fef3c7;
+    --mod-ink: #92400e;
+    --eq: #2563eb;
+    --eq-hover: #1d4ed8;
+    --danger: #b91c1c;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "BIZ UDPGothic", "Hiragino Sans", "Yu Gothic UI", "Meiryo", sans-serif;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 24px 12px;
+  }
+  .wrap { width: 100%; max-width: 380px; }
+  /* タイトルは表示しないが、あった分の余白はそのまま残す */
+  h1 { font-size: 1.05rem; margin: 0 0 12px; color: var(--sub); font-weight: 700; text-align: center; visibility: hidden; }
+
+  .calc {
+    background: var(--body);
+    border-radius: 20px;
+    padding: 16px;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+  }
+  .display {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    padding: 12px 14px;
+    margin-bottom: 14px;
+    text-align: right;
+    min-height: 104px;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    overflow: hidden;
+  }
+  .expr {
+    font-size: 1rem;
+    color: var(--sub);
+    height: 1.5em;
+    line-height: 1.5em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-variant-numeric: tabular-nums;
+  }
+  /* 表示画面の高さは、あまりの行がある状態に固定（何を表示しても高さが変わらない） */
+  .main {
+    font-size: 2.6rem;
+    font-weight: 700;
+    height: 3.2rem;
+    line-height: 3.2rem;
+    white-space: nowrap;
+    overflow-x: auto;
+    font-variant-numeric: tabular-nums;
+    scrollbar-width: none;
+  }
+  .main::-webkit-scrollbar { display: none; }
+  .main.error {
+    color: var(--danger);
+    font-size: 1.1rem;
+    line-height: 1.4;
+    white-space: normal;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+  }
+  .rem {
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: var(--mod-ink);
+    height: 1.5em;
+    line-height: 1.5em;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .keys {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+  }
+  button {
+    font-family: inherit;
+    font-size: 1.45rem;
+    border: none;
+    border-radius: 14px;
+    padding: 0;
+    height: 64px;
+    background: var(--key);
+    color: var(--ink);
+    cursor: pointer;
+    transition: background 0.12s, transform 0.05s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  button:hover { background: var(--key-hover); }
+  button:active { transform: scale(0.96); }
+  button:focus-visible { outline: 3px solid #93c5fd; outline-offset: 2px; }
+  .fn { color: var(--sub); font-size: 1.15rem; }
+  .op { background: var(--op); color: var(--op-ink); font-weight: 700; }
+  .op:hover { background: #bfdbfe; }
+  .op.active { background: var(--op-active); color: #fff; }
+  /* 黄色の÷（あまりを出す割り算）：÷は青の÷と同じ大きさ・中央 */
+  .mod { background: var(--mod); color: var(--mod-ink); font-weight: 700; }
+  .mod:hover { background: #fde68a; }
+  .mod.active { background: #b45309; color: #fff; }
+  .eq { background: var(--eq); color: #fff; font-weight: 700; }
+  .eq:hover { background: var(--eq-hover); }
+
+  .note {
+    font-size: 0.82rem;
+    color: var(--sub);
+    margin: 12px 4px 0;
+    line-height: 1.6;
+  }
+  .history {
+    margin-top: 16px;
+    background: var(--body);
+    border-radius: 16px;
+    padding: 12px 16px;
+    box-shadow: 0 4px 14px rgba(15, 23, 42, 0.05);
+  }
+  /* 計算の記録：クリックで折りたたみ（details/summary を使用） */
+  .history summary {
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: var(--sub);
+    cursor: pointer;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    user-select: none;
+  }
+  .history summary::-webkit-details-marker { display: none; }
+  .history summary::before {
+    content: "▶";
+    font-size: 0.7rem;
+    transition: transform 0.15s;
+  }
+  .history[open] summary::before { transform: rotate(90deg); }
+  .history[open] summary { margin-bottom: 6px; }
+  .history .h-tools { text-align: right; margin-top: 6px; }
+  .history .h-tools button {
+    font-size: 0.78rem;
+    height: auto;
+    padding: 4px 10px;
+    border-radius: 8px;
+    color: var(--sub);
+  }
+  .history ul { list-style: none; margin: 0; padding: 0; }
+  .history li {
+    padding: 6px 0;
+    border-top: 1px solid #f1f5f9;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    font-size: 1rem;
+  }
+  .history li:first-child { border-top: none; }
+  .history li .h-amari { color: var(--mod-ink); font-weight: 700; }
+  .history .empty { color: #9ca3af; font-size: 0.85rem; text-align: left; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>シンプル電卓</h1>
+
+  <div class="calc">
+    <div class="display" aria-live="polite">
+      <div class="expr" id="expr"></div>
+      <div class="main" id="main">0</div>
+      <div class="rem" id="rem"></div>
+    </div>
+
+    <div class="keys">
+      <button class="fn" data-action="clear">C</button>
+      <button class="fn" data-action="back" aria-label="1文字消す">⌫</button>
+      <button class="mod" data-op="mod" aria-label="あまりを出す割り算" title="あまりを出す割り算">÷</button>
+      <button class="op" data-op="/">÷</button>
+
+      <button data-num="7">7</button>
+      <button data-num="8">8</button>
+      <button data-num="9">9</button>
+      <button class="op" data-op="*">×</button>
+
+      <button data-num="4">4</button>
+      <button data-num="5">5</button>
+      <button data-num="6">6</button>
+      <button class="op" data-op="-">−</button>
+
+      <button data-num="1">1</button>
+      <button data-num="2">2</button>
+      <button data-num="3">3</button>
+      <button class="op" data-op="+">＋</button>
+
+      <button class="fn" data-action="sign" aria-label="符号を反転">±</button>
+      <button data-num="0">0</button>
+      <button data-action="dot">.</button>
+      <button class="eq" data-action="equals">＝</button>
+    </div>
+  </div>
+
+  <details class="history" open>
+    <summary>計算の記録</summary>
+    <ul id="historyList"><li class="empty">まだ計算していません</li></ul>
+    <div class="h-tools"><button id="clearHistory">記録を消す</button></div>
+  </details>
+</div>
+
+<script>
+// ===== 電卓の状態 =====
+let cur = '0';        // 今入力している数（文字列で持つ）
+let prev = null;      // 演算子の左側の数
+let op = null;        // 保留中の演算子：'+', '-', '*', '/', 'mod'
+let fresh = false;    // true なら、次の数字入力で cur を置き換える
+let modResult = null; // あまり付き割り算の結果 {q: 商, r: あまり}
+let errorState = false;
+
+const SYMBOL = { '+': '＋', '-': '−', '*': '×', '/': '÷', 'mod': '÷' };
+const MAX_DIGITS = 15;
+
+const exprEl = document.getElementById('expr');
+const mainEl = document.getElementById('main');
+const remEl = document.getElementById('rem');
+const historyEl = document.getElementById('historyList');
+const history = [];
+
+// ===== 表示用：小数の誤差（0.1+0.2 など）を目立たせないよう12桁で丸める =====
+function fmt(n) {
+  if (!isFinite(n)) return 'エラー';
+  const rounded = parseFloat(n.toPrecision(12));
+  return String(Object.is(rounded, -0) ? 0 : rounded);
+}
+
+function escapeHtml(s) {
+  return s.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+}
+
+// ===== 画面の更新 =====
+function render() {
+  mainEl.classList.remove('error');
+  // 商は通常の割り算と同じく枠内に表示し、あまりはその下の行に表示
+  mainEl.textContent = modResult ? fmt(modResult.q) : cur;
+  remEl.textContent = modResult ? 'あまり ' + fmt(modResult.r) : '';
+  mainEl.scrollLeft = mainEl.scrollWidth;
+  // 押されている演算子ボタンを強調
+  document.querySelectorAll('[data-op]').forEach(b => {
+    b.classList.toggle('active', op !== null && fresh && b.dataset.op === op);
+  });
+}
+
+function showError(msg) {
+  mainEl.textContent = msg;
+  mainEl.classList.add('error');
+  remEl.textContent = '';
+  cur = '0'; prev = null; op = null; fresh = true; modResult = null;
+  errorState = true;
+  document.querySelectorAll('[data-op]').forEach(b => b.classList.remove('active'));
+}
+
+// エラー表示中やあまりの結果表示中に新しい入力が来たら、いったんリセット
+function leaveSpecialState() {
+  if (errorState) { errorState = false; exprEl.textContent = ''; }
+}
+
+// ===== 入力処理 =====
+function inputDigit(d) {
+  leaveSpecialState();
+  if (modResult) { modResult = null; exprEl.textContent = ''; }
+  if (fresh) { cur = d; fresh = false; }
+  else {
+    if (cur.replace(/[-.]/g, '').length >= MAX_DIGITS) return;
+    cur = (cur === '0') ? d : (cur === '-0' ? '-' + d : cur + d);
+  }
+  render();
+}
+
+function inputDot() {
+  leaveSpecialState();
+  if (modResult) { modResult = null; exprEl.textContent = ''; }
+  if (fresh) { cur = '0.'; fresh = false; }
+  else if (!cur.includes('.')) { cur += '.'; }
+  render();
+}
+
+function toggleSign() {
+  if (errorState) return;
+  if (modResult) { modResult = null; exprEl.textContent = ''; fresh = false; }
+  if (fresh) { cur = '0'; fresh = false; }
+  cur = cur.startsWith('-') ? cur.slice(1) : '-' + cur;
+  render();
+}
+
+function backspace() {
+  if (errorState || fresh || modResult) return;
+  cur = cur.slice(0, -1);
+  if (cur === '' || cur === '-') cur = '0';
+  render();
+}
+
+function clearAll() {
+  cur = '0'; prev = null; op = null; fresh = false; modResult = null; errorState = false;
+  exprEl.textContent = '';
+  render();
+}
+
+// 2つの数で計算する（あまり付き割り算以外）。失敗したら null
+function calc(a, o, b) {
+  switch (o) {
+    case '+': return a + b;
+    case '-': return a - b;
+    case '*': return a * b;
+    case '/':
+      if (b === 0) { showError('0では割れません'); return null; }
+      return a / b;
+  }
+}
+
+// あまり付き割り算：商とあまりを返す。条件に合わなければ null
+function divmod(a, b) {
+  if (!Number.isInteger(a) || !Number.isInteger(b) || a < 0 || b < 0) {
+    showError('「÷あまり」は0以上の整数で計算してください');
+    return null;
+  }
+  if (b === 0) { showError('0では割れません'); return null; }
+  const q = Math.floor(a / b);
+  const r = a - q * b;
+  return { q, r };
+}
+
+// 演算子ボタン
+function setOp(o) {
+  if (errorState) return;
+  if (modResult) {
+    // あまりの結果のあとに演算子を押したら、商を使って続ける
+    prev = modResult.q; modResult = null;
+    op = o; fresh = true; cur = fmt(prev);
+    exprEl.textContent = fmt(prev) + ' ' + SYMBOL[o];
+    render();
+    return;
+  }
+  if (op !== null && fresh) {
+    // 演算子の押し直し
+    op = o;
+    exprEl.textContent = fmt(prev) + ' ' + SYMBOL[o];
+    render();
+    return;
+  }
+  const value = parseFloat(cur);
+  if (op !== null && op !== 'mod') {
+    // 連続計算（例：2 + 3 × → 5 ×）
+    const result = calc(prev, op, value);
+    if (result === null) return;
+    addHistory(fmt(prev) + ' ' + SYMBOL[op] + ' ' + fmt(value) + ' ＝ ' + fmt(result));
+    prev = result;
+  } else if (op === 'mod') {
+    // あまり付き割り算の途中で演算子を押したら、まず＝として処理
+    equals();
+    if (errorState) return;
+    setOp(o);
+    return;
+  } else {
+    prev = value;
+  }
+  op = o; fresh = true; cur = fmt(prev);
+  exprEl.textContent = fmt(prev) + ' ' + SYMBOL[o];
+  render();
+}
+
+// ＝ボタン
+function equals() {
+  if (errorState || op === null) return;
+  const a = prev;
+  const b = parseFloat(cur);
+  const exprText = fmt(a) + ' ' + SYMBOL[op] + ' ' + fmt(b) + ' ＝';
+
+  if (op === 'mod') {
+    const res = divmod(a, b);
+    if (res === null) { exprEl.textContent = exprText; return; }
+    modResult = res;
+    cur = fmt(res.q);
+    exprEl.textContent = exprText;
+    addHistory(exprText + ' ' + fmt(res.q), fmt(res.r));
+  } else {
+    const result = calc(a, op, b);
+    if (result === null) { exprEl.textContent = exprText; return; }
+    if (!isFinite(result)) { showError('数が大きすぎます'); return; }
+    cur = fmt(result);
+    exprEl.textContent = exprText;
+    addHistory(exprText + ' ' + cur);
+  }
+  prev = null; op = null; fresh = true;
+  render();
+}
+
+// ===== 計算の記録 =====
+function addHistory(text, amari) {
+  history.unshift({ text, amari });
+  if (history.length > 10) history.pop();
+  historyEl.innerHTML = history.map(h =>
+    '<li>' + escapeHtml(h.text) +
+    (h.amari !== undefined ? ' <span class="h-amari">あまり</span> ' + escapeHtml(h.amari) : '') +
+    '</li>'
+  ).join('');
+}
+document.getElementById('clearHistory').addEventListener('click', () => {
+  history.length = 0;
+  historyEl.innerHTML = '<li class="empty">まだ計算していません</li>';
+});
+
+// ===== ボタンのクリック =====
+document.querySelector('.keys').addEventListener('click', e => {
+  const btn = e.target.closest('button');
+  if (!btn) return;
+  if (btn.dataset.num !== undefined) inputDigit(btn.dataset.num);
+  else if (btn.dataset.op) setOp(btn.dataset.op);
+  else {
+    switch (btn.dataset.action) {
+      case 'clear': clearAll(); break;
+      case 'back': backspace(); break;
+      case 'sign': toggleSign(); break;
+      case 'dot': inputDot(); break;
+      case 'equals': equals(); break;
+    }
+  }
+});
+
+// ===== キーボード操作 =====
+document.addEventListener('keydown', e => {
+  const k = e.key;
+  if (/^[0-9]$/.test(k)) inputDigit(k);
+  else if (k === '.') inputDot();
+  else if (k === '+' || k === '-' || k === '*' || k === '/') { e.preventDefault(); setOp(k); }
+  else if (k === '%') setOp('mod');
+  else if (k === 'Enter' || k === '=') { e.preventDefault(); equals(); }
+  else if (k === 'Backspace') backspace();
+  else if (k === 'Escape' || k === 'Delete') clearAll();
+  else return;
+  // キー操作後はボタンのフォーカスを外して、Enterで別のボタンが押されないようにする
+  if (document.activeElement && document.activeElement.tagName === 'BUTTON') document.activeElement.blur();
+});
+
+render();
+</script>
+</body>
+</html>
